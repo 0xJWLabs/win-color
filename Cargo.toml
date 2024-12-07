@@ -1,0 +1,29 @@
+[package]
+name = "win-color"
+version = "0.0.1"
+edition = "2021"
+description = "A Rust library for managing and manipulating colors in Windows applications, providing high-level abstractions for color handling, gradient creation, and direct integration with Direct2D."
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/0xJWLabs/win-color"
+repository = "https://github.com/0xJWLabs/win-color"
+documentation = "https://docs.rs/win-color"
+categories = ["os::windows-apis", "api-bindings"]
+keywords = ["colors", "windows", "system-wide", "global", "win32"]
+authors = ["0xJWLabs <0xJWLabs@gmail.com>"]
+
+[dependencies]
+serde = { version = "1.0.215", features = ["derive"] }
+phf_macros = "0.11.2"
+phf = "0.11.2"
+regex = "1.11.1"
+
+[dependencies.windows]
+version = "0.58.0"
+features = [
+  "Win32_Foundation",
+  "Foundation_Numerics",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Direct2D",
+  "Win32_Graphics_Direct2D_Common",
+]
