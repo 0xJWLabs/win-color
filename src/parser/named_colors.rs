@@ -1,5 +1,6 @@
-use regex::Regex;
 use std::sync::LazyLock;
+
+use regex::Regex;
 use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
 
 const HEX_PATTERN: &str = r"#[0-9A-F]{3,8}";

@@ -27,13 +27,32 @@ pub enum GradientDirection {
     Coordinates(GradientCoordinates),
 }
 
+impl From<&str> for GradientDirection {
+    fn from(s: &str) -> Self {
+        Self::Direction(s.to_string())
+    }
+}
+
 /// A structure that defines a gradient mapping, which contains a list of color stops and a direction.
 #[derive(Debug, Clone, Deserialize)]
-pub struct GradientMapping {
+pub struct ColorMapping {
     /// A list of colors in the gradient, represented as hexadecimal color strings.
     pub colors: Vec<String>,
     /// The direction of the gradient, represented as a `GradientDirection`.
     pub direction: GradientDirection,
+}
+
+pub trait ColorMappingImpl {
+    fn new(colors: &[&str], direction: GradientDirection) -> Self;
+}
+
+impl ColorMappingImpl for ColorMapping {
+    fn new(colors: &[&str], direction: GradientDirection) -> Self {
+        Self {
+            colors: colors.iter().map(|&s| s.to_string()).collect(),
+            direction,
+        }
+    }
 }
 
 /// Defines the coordinates for the start and end points of a gradient.
@@ -209,4 +228,29 @@ fn parse_angle(s: &str) -> Option<f32> {
                 .map(|t: f32| t * 360.0)
         })
         .or_else(|| s.parse().ok())
+}
+
+pub fn is_valid_direction(direction: &str) -> bool {
+    matches!(
+        direction,
+        "to right"
+            | "to left"
+            | "to top"
+            | "to bottom"
+            | "to top right"
+            | "to top left"
+            | "to bottom right"
+            | "to bottom left"
+    ) || is_valid_angle(direction)
+}
+
+fn is_valid_angle(direction: &str) -> bool {
+    const VALID_SUFFIXES: [&str; 4] = ["deg", "grad", "rad", "turn"];
+
+    VALID_SUFFIXES.iter().any(|&suffix| {
+        direction
+            .strip_suffix(suffix) // Remove the suffix
+            .and_then(|num| num.parse::<f32>().ok()) // Parse the numeric part
+            .is_some()
+    })
 }

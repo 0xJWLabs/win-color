@@ -109,20 +109,3 @@ pub fn lighten(color: D2D1_COLOR_F, percentage: f32) -> D2D1_COLOR_F {
     hsla.l += hsla.l * percentage / 100.0;
     hsla_to_d2d1(hsla)
 }
-
-pub fn is_valid_direction(direction: &str) -> bool {
-    matches!(
-        direction,
-        "to right"
-            | "to left"
-            | "to top"
-            | "to bottom"
-            | "to top right"
-            | "to top left"
-            | "to bottom right"
-            | "to bottom left"
-    ) || direction
-        .strip_suffix("deg")
-        .and_then(|angle| angle.parse::<f32>().ok())
-        .is_some()
-}
