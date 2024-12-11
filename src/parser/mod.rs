@@ -51,11 +51,11 @@ pub fn parse_color_mapping(
     match s.colors.len() {
         0 => Ok(Color::Solid(Solid {
             color: D2D1_COLOR_F::default(),
-            opacity: 0.0,
+            brush: None,
         })),
         1 => Ok(Color::Solid(Solid {
             color: parse(s.colors[0].as_str(), is_active)?,
-            opacity: 0.0,
+            brush: None,
         })),
         _ => {
             let num_colors = s.colors.len();
@@ -82,7 +82,7 @@ pub fn parse_color_mapping(
             Ok(Color::Gradient(Gradient {
                 gradient_stops,
                 direction,
-                opacity: 0.0,
+                brush: None,
             }))
         }
     }
@@ -123,10 +123,7 @@ pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color, WinColorEr
     if color_matches.len() == 1 {
         let color = parse(color_matches[0], is_active)?;
 
-        return Ok(Color::Solid(Solid {
-            color,
-            opacity: 0.0,
-        }));
+        return Ok(Color::Solid(Solid { color, brush: None }));
     }
 
     let remaining_input = s
@@ -169,7 +166,7 @@ pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color, WinColorEr
     Ok(Color::Gradient(Gradient {
         gradient_stops,
         direction,
-        opacity: 0.0,
+        brush: None,
     }))
 }
 
