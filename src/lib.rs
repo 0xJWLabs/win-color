@@ -35,6 +35,7 @@ pub use gradient::ColorMappingImpl;
 pub use gradient::Gradient;
 pub use gradient::GradientCoordinates;
 pub use gradient::GradientDirection;
+pub use gradient::GradientImpl;
 pub use solid::Solid;
 
 /// The `Color` enum represents different types of colors, including both solid colors and gradients.
