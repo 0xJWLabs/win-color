@@ -23,14 +23,15 @@ use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
 use windows::Win32::Graphics::Direct2D::Common::D2D_POINT_2F;
 use windows::Win32::Graphics::Direct2D::ID2D1Brush;
-use windows::Win32::Graphics::Direct2D::ID2D1DCRenderTarget;
 use windows::Win32::Graphics::Direct2D::ID2D1HwndRenderTarget;
 use windows::Win32::Graphics::Direct2D::D2D1_BRUSH_PROPERTIES;
 use windows::Win32::Graphics::Direct2D::D2D1_EXTEND_MODE_CLAMP;
 use windows::Win32::Graphics::Direct2D::D2D1_GAMMA_2_2;
 use windows::Win32::Graphics::Direct2D::D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES;
 
-pub use error::WinColorError;
+pub use error::Error;
+pub use error::ErrorKind;
+pub use error::Result;
 pub use gradient::ColorMapping;
 pub use gradient::ColorMappingImpl;
 pub use gradient::Gradient;
@@ -108,7 +109,7 @@ pub trait ColorImpl {
     ///
     /// # Returns
     /// A `Result` containing either the fetched `Color` or a `WinColorError` if the operation fails.
-    fn fetch(color: &GlobalColor, is_active: Option<bool>) -> Result<Color, WinColorError>;
+    fn from_global_color(color: &GlobalColor, is_active: Option<bool>) -> Result<Color>;
 
     /// Sets the opacity of the color.
     ///
@@ -162,38 +163,26 @@ pub trait ColorImpl {
         window_rect: &RECT,
         brush_properties: &D2D1_BRUSH_PROPERTIES,
     ) -> WinResult<()>;
-
-    /// Converts the color to a Direct2D brush using device context.
-    ///
-    /// This method creates a Direct2D brush (`ID2D1Brush`) from the color, which can be used for rendering
-    /// on a Direct2D render target. The brush is initialized with the given window rectangle and brush properties.
-    ///
-    /// # Parameters
-    /// - `render_target`: The Direct2D render target on which the brush will be applied.
-    /// - `window_rect`: The dimensions of the window, used to adjust the brush's rendering.
-    /// - `brush_properties`: The properties that define how the brush will behave.
-    ///
-    /// # Returns
-    /// A `WinResult<()>`, indicating success or failure.
-    fn to_d2d1_brush_dc(
-        &mut self,
-        render_target: &ID2D1DCRenderTarget,
-        window_rect: &RECT,
-        brush_properties: &D2D1_BRUSH_PROPERTIES,
-    ) -> WinResult<()>;
 }
 
-impl ColorImpl for Color {
-    fn fetch(
-        color_definition: &GlobalColor,
-        is_active: Option<bool>,
-    ) -> Result<Self, WinColorError> {
-        match color_definition {
+pub trait GlobalColorImpl {
+    fn to_color(&self, is_active: Option<bool>) -> Result<Color>;
+}
+
+impl GlobalColorImpl for GlobalColor {
+    fn to_color(&self, is_active: Option<bool>) -> Result<Color> {
+        match self {
             GlobalColor::String(s) => parse_color(s.as_str(), is_active),
             GlobalColor::Mapping(gradient_def) => {
                 parse_color_mapping(gradient_def.clone(), is_active)
             }
         }
+    }
+}
+
+impl ColorImpl for Color {
+    fn from_global_color(global_color: &GlobalColor, is_active: Option<bool>) -> Result<Self> {
+        global_color.to_color(is_active)
     }
 
     fn set_opacity(&self, opacity: f32) {
@@ -250,58 +239,6 @@ impl ColorImpl for Color {
                 .brush
                 .as_ref()
                 .map(|id2d1_brush| id2d1_brush.into()),
-        }
-    }
-
-    fn to_d2d1_brush_dc(
-        &mut self,
-        render_target: &ID2D1DCRenderTarget,
-        window_rect: &RECT,
-        brush_properties: &D2D1_BRUSH_PROPERTIES,
-    ) -> WinResult<()> {
-        match self {
-            Color::Solid(solid) => unsafe {
-                let id2d1_brush =
-                    render_target.CreateSolidColorBrush(&solid.color, Some(brush_properties))?;
-
-                id2d1_brush.SetOpacity(0.0);
-
-                solid.brush = Some(id2d1_brush);
-
-                Ok(())
-            },
-            Color::Gradient(gradient) => unsafe {
-                let width = (window_rect.right - window_rect.left) as f32;
-                let height = (window_rect.bottom - window_rect.top) as f32;
-
-                let gradient_properties = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES {
-                    startPoint: D2D_POINT_2F {
-                        x: gradient.direction.start[0] * width,
-                        y: gradient.direction.start[1] * height,
-                    },
-                    endPoint: D2D_POINT_2F {
-                        x: gradient.direction.end[0] * width,
-                        y: gradient.direction.end[1] * height,
-                    },
-                };
-
-                let gradient_stop_collection = render_target.CreateGradientStopCollection(
-                    &gradient.gradient_stops,
-                    D2D1_GAMMA_2_2,
-                    D2D1_EXTEND_MODE_CLAMP,
-                )?;
-
-                let id2d1_brush = render_target.CreateLinearGradientBrush(
-                    &gradient_properties,
-                    Some(brush_properties),
-                    &gradient_stop_collection,
-                )?;
-
-                id2d1_brush.SetOpacity(0.0);
-                gradient.brush = Some(id2d1_brush);
-
-                Ok(())
-            },
         }
     }
 

@@ -11,7 +11,9 @@ use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
 use windows::Win32::Graphics::Direct2D::Common::D2D1_GRADIENT_STOP;
 use windows::Win32::Graphics::Dwm::DwmGetColorizationColor;
 
-use crate::error::WinColorError;
+use crate::error::Error;
+use crate::error::ErrorKind;
+use crate::error::Result;
 use crate::gradient::is_valid_direction;
 use crate::utils::darken;
 use crate::utils::lighten;
@@ -44,10 +46,7 @@ use crate::Solid;
 /// };
 /// let color = parse_color_mapping(mapping, Some(false))?;
 /// ```
-pub fn parse_color_mapping(
-    s: ColorMapping,
-    is_active: Option<bool>,
-) -> Result<Color, WinColorError> {
+pub fn parse_color_mapping(s: ColorMapping, is_active: Option<bool>) -> Result<Color> {
     match s.colors.len() {
         0 => Ok(Color::Solid(Solid {
             color: D2D1_COLOR_F::default(),
@@ -105,7 +104,7 @@ pub fn parse_color_mapping(
 /// ```rust
 /// let color = parse_color("#89b4fa", Some(false))?;
 /// ```
-pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color, WinColorError> {
+pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color> {
     if s.starts_with("gradient(") && s.ends_with(")") {
         return parse_color(
             strip_string(s.to_string(), &["gradient("], ')').as_str(),
@@ -170,13 +169,16 @@ pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color, WinColorEr
     }))
 }
 
-fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F, WinColorError> {
+fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F> {
     if s == "accent" {
         let mut pcr_colorization: u32 = 0;
         let mut pf_opaqueblend: BOOL = FALSE;
 
         if unsafe { DwmGetColorizationColor(&mut pcr_colorization, &mut pf_opaqueblend) }.is_err() {
-            return Err(WinColorError::InvalidAccent);
+            return Err(Error::new(
+                ErrorKind::InvalidAccent,
+                "accent color not found",
+            ));
         }
 
         let r = ((pcr_colorization & 0x00FF0000) >> 16) as f32 / 255.0;
@@ -208,7 +210,7 @@ fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F, WinColorError
         let params: Vec<&str> = rgba.split(',').map(|s| s.trim()).collect();
 
         if params.len() != 3 && params.len() != 4 {
-            return Err(WinColorError::InvalidRgb(s.to_string()));
+            return Err(Error::new(ErrorKind::InvalidRgb, s));
         }
 
         let r = parse_percent_or_255(params[0]);
@@ -232,16 +234,16 @@ fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F, WinColorError
             }
         }
 
-        return Err(WinColorError::InvalidRgb(s.to_string()));
+        return Err(Error::new(ErrorKind::InvalidRgb, s));
     } else if s.starts_with("darken(") || s.starts_with("lighten(") {
         let darken_lighten_re = &DARKEN_LIGHTEN_REGEX;
 
         if let Some(caps) = darken_lighten_re.captures(s) {
             if caps.len() != 4 {
                 if s.starts_with("darken(") {
-                    return Err(WinColorError::InvalidDarkenOrLighten(s.to_string(), true));
+                    return Err(Error::new(ErrorKind::InvalidDarken, s));
                 }
-                return Err(WinColorError::InvalidDarkenOrLighten(s.to_string(), false));
+                return Err(Error::new(ErrorKind::InvalidLighten, s));
             }
             let dark_or_lighten = &caps[1];
             let color_str = &caps[2];
@@ -258,25 +260,25 @@ fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F, WinColorError
         }
 
         if s.starts_with("darken(") {
-            return Err(WinColorError::InvalidDarkenOrLighten(s.to_string(), true));
+            return Err(Error::new(ErrorKind::InvalidDarken, s));
         }
-        return Err(WinColorError::InvalidDarkenOrLighten(s.to_string(), false));
+        return Err(Error::new(ErrorKind::InvalidLighten, s));
     }
 
     Ok(D2D1_COLOR_F::default())
 }
 
-fn parse_hex(s: &str) -> Result<D2D1_COLOR_F, WinColorError> {
+fn parse_hex(s: &str) -> Result<D2D1_COLOR_F> {
     if !s.is_ascii() {
-        return Err(WinColorError::InvalidHex(s.to_string()));
+        return Err(Error::new(ErrorKind::InvalidHex, s));
     }
 
     let n = s.len();
 
-    fn parse_single_digit(digit: &str) -> Result<f32, WinColorError> {
+    fn parse_single_digit(digit: &str) -> Result<f32> {
         u8::from_str_radix(digit, 16)
             .map(|n| ((n << 4) | n) as f32 / 255.0)
-            .map_err(|_| WinColorError::InvalidHex(digit.to_string()))
+            .map_err(|_| Error::new(ErrorKind::InvalidHex, digit))
     }
 
     if n == 3 || n == 4 {
@@ -294,25 +296,25 @@ fn parse_hex(s: &str) -> Result<D2D1_COLOR_F, WinColorError> {
     } else if n == 6 || n == 8 {
         let r = u8::from_str_radix(&s[0..2], 16)
             .map(|n| n as f32 / 255.0)
-            .map_err(|_| WinColorError::InvalidHex(s.to_string()))?;
+            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?;
         let g = u8::from_str_radix(&s[2..4], 16)
             .map(|n| n as f32 / 255.0)
-            .map_err(|_| WinColorError::InvalidHex(s.to_string()))?;
+            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?;
         let b = u8::from_str_radix(&s[4..6], 16)
             .map(|n| n as f32 / 255.0)
-            .map_err(|_| WinColorError::InvalidHex(s.to_string()))?;
+            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?;
 
         let a = if n == 8 {
             u8::from_str_radix(&s[6..8], 16)
                 .map(|n| n as f32 / 255.0)
-                .map_err(|_| WinColorError::InvalidHex(s.to_string()))?
+                .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?
         } else {
             1.0
         };
 
         Ok(D2D1_COLOR_F { r, g, b, a })
     } else {
-        Err(WinColorError::InvalidHex(s.to_string()))
+        Err(Error::new(ErrorKind::InvalidHex, s))
     }
 }
 

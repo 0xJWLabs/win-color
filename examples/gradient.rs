@@ -1,8 +1,7 @@
-use win_color::Color;
-use win_color::ColorImpl;
 use win_color::ColorMapping;
 use win_color::ColorMappingImpl;
 use win_color::GlobalColor;
+use win_color::GlobalColorImpl;
 use win_color::GradientDirection;
 
 fn main() {
@@ -11,6 +10,6 @@ fn main() {
         &["#89b4fa", "#cba6f7"],
         GradientDirection::from("40grad"),
     ));
-    println!("{:?}", Color::fetch(&gc, None));
-    println!("{:?}", Color::fetch(&gc_mapping, None));
+    println!("{:?}", gc.to_color(None));
+    println!("{:?}", gc_mapping.to_color(None));
 }

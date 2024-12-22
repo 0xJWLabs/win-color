@@ -1,10 +1,9 @@
-use win_color::Color;
-use win_color::ColorImpl;
 use win_color::GlobalColor;
+use win_color::GlobalColorImpl;
 
 fn main() {
     let gc = GlobalColor::String("#89b4fa".to_string());
     let gc_1 = GlobalColor::String("red".to_string());
-    println!("{:?}", Color::fetch(&gc, None));
-    println!("{:?}", Color::fetch(&gc_1, None));
+    println!("{:?}", &gc.to_color(None));
+    println!("{:?}", gc_1.to_color(None));
 }

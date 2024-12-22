@@ -9,7 +9,7 @@ use windows::Win32::{
     },
 };
 
-use crate::error::WinColorError;
+use crate::error::{Error, ErrorKind, Result};
 
 #[allow(dead_code)]
 pub trait GradientImpl {
@@ -142,7 +142,7 @@ pub struct GradientCoordinates {
 /// Implements the `TryFrom` trait to convert a string into a `GradientCoordinates` object.
 /// The string can represent an angle (e.g., "45deg") or a direction (e.g., "to right").
 impl TryFrom<&str> for GradientCoordinates {
-    type Error = WinColorError;
+    type Error = Error;
 
     /// Tries to convert a string into a `GradientCoordinates` struct.
     ///
@@ -151,7 +151,7 @@ impl TryFrom<&str> for GradientCoordinates {
     ///
     /// # Returns
     /// A `Result` that is `Ok(GradientCoordinates)` on success or `Err(WinColorError)` on failure.
-    fn try_from(color: &str) -> Result<Self, Self::Error> {
+    fn try_from(color: &str) -> Result<Self> {
         parse_coordinates(color)
     }
 }
@@ -201,7 +201,7 @@ fn calculate_point(line: &Line, x: f32) -> [f32; 2] {
 ///
 /// # Returns
 /// A `Result` that is `Ok(GradientCoordinates)` on success or `Err(WinColorError)` on failure.
-fn parse_coordinates(coordinates: &str) -> Result<GradientCoordinates, WinColorError> {
+fn parse_coordinates(coordinates: &str) -> Result<GradientCoordinates> {
     let angle = parse_angle(coordinates);
 
     match angle {
@@ -263,8 +263,9 @@ fn parse_coordinates(coordinates: &str) -> Result<GradientCoordinates, WinColorE
                 start: [1.0, 0.0],
                 end: [0.0, 1.0],
             }),
-            _ => Err(WinColorError::InvalidGradientCoordinates(
-                coordinates.to_string(),
+            _ => Err(Error::new(
+                ErrorKind::InvalidGradientCoordinates,
+                coordinates,
             )),
         },
     }
