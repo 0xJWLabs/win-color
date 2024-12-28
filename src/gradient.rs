@@ -54,7 +54,7 @@ pub trait GradientImpl {
 ///     brush: None, // Brush will be initialized later
 /// };
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Gradient {
     /// The direction of the gradient, either as a string or as coordinates.
     pub direction: GradientCoordinates,
@@ -93,7 +93,7 @@ impl GradientImpl for Gradient {
 
 /// Enum representing different types of gradient directions.
 /// It can either be a string describing the direction (e.g., "to right") or explicit coordinates for the gradient direction.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum GradientDirection {
     /// Direction is represented as a string (e.g., "to right").
@@ -109,7 +109,7 @@ impl From<&str> for GradientDirection {
 }
 
 /// A structure that defines a gradient mapping, which contains a list of color stops and a direction.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct ColorMapping {
     /// A list of colors in the gradient, represented as hexadecimal color strings.
     pub colors: Vec<String>,
@@ -131,7 +131,7 @@ impl ColorMappingImpl for ColorMapping {
 }
 
 /// Defines the coordinates for the start and end points of a gradient.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct GradientCoordinates {
     /// The [x, y] coordinates for the start point of the gradient.
     pub start: [f32; 2],

@@ -42,7 +42,7 @@ pub use solid::Solid;
 
 /// The `Color` enum represents different types of colors, including both solid colors and gradients.
 /// It can be either a solid color or a gradient, allowing flexibility in color representation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Color {
     /// Represents a solid color.
     ///
@@ -57,7 +57,7 @@ pub enum Color {
 
 /// The `GlobalColor` enum represents a global color that can be either a color string (e.g., a hex color code or a color name)
 /// or a mapping to a gradient definition.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum GlobalColor {
     /// A string representing a color, which could be a hex color code or a color name.
