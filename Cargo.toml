@@ -1,6 +1,6 @@
 [package]
 name = "win-color"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "A Rust library for managing and manipulating colors in Windows applications, providing high-level abstractions for color handling, gradient creation, and direct integration with Direct2D."
 license = "MIT"

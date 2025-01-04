@@ -59,7 +59,7 @@ pub fn parse_color_mapping(s: ColorMapping, is_active: Option<bool>) -> Result<C
         _ => {
             let num_colors = s.colors.len();
             let step = 1.0 / (num_colors - 1) as f32;
-            let gradient_stops: Vec<D2D1_GRADIENT_STOP> = s
+            let gradient_stops = s
                 .colors
                 .iter()
                 .enumerate()
@@ -112,12 +112,10 @@ pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color> {
         );
     }
 
-    let color_re = &COLOR_REGEX;
-
-    let color_matches: Vec<&str> = color_re
+    let color_matches = COLOR_REGEX
         .captures_iter(s)
         .filter_map(|cap| cap.get(0).map(|m| m.as_str()))
-        .collect();
+        .collect::<Vec<&str>>();
 
     if color_matches.len() == 1 {
         let color = parse(color_matches[0], is_active)?;
@@ -129,13 +127,13 @@ pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color> {
         [s.rfind(color_matches.last().unwrap()).unwrap() + color_matches.last().unwrap().len()..]
         .trim_start();
 
-    let remaining_input_arr: Vec<&str> = remaining_input
+    let remaining_input_arr = remaining_input
         .split(',')
         .filter_map(|s| {
             let trimmed = s.trim();
             (!trimmed.is_empty()).then_some(trimmed)
         })
-        .collect();
+        .collect::<Vec<&str>>();
 
     let direction = remaining_input_arr
         .iter()
@@ -143,10 +141,10 @@ pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color> {
         .map(|&s| s.to_string())
         .unwrap_or_else(|| "to_right".to_string());
 
-    let colors: Vec<D2D1_COLOR_F> = color_matches
+    let colors = color_matches
         .iter()
         .filter_map(|&color| parse(color, is_active).ok()) // Only keep Ok values
-        .collect();
+        .collect::<Vec<D2D1_COLOR_F>>();
 
     let num_colors = colors.len();
     let step = 1.0 / (num_colors - 1) as f32;
@@ -206,8 +204,12 @@ fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F> {
     }
 
     if s.starts_with("rgb(") || s.starts_with("rgba(") {
-        let rgba = strip_string(s.to_string(), &["rgb(", "rgba("], ')');
-        let params: Vec<&str> = rgba.split(',').map(|s| s.trim()).collect();
+        let stripped_rgba = strip_string(s.to_string(), &["rgb(", "rgba("], ')');
+        let rgba = stripped_rgba.replace(['/', ','], " ");
+        let params = rgba
+            .split_whitespace()
+            .map(|s| s.trim())
+            .collect::<Vec<&str>>();
 
         if params.len() != 3 && params.len() != 4 {
             return Err(Error::new(ErrorKind::InvalidRgb, s));
@@ -269,45 +271,43 @@ fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F> {
 }
 
 fn parse_hex(s: &str) -> Result<D2D1_COLOR_F> {
-    if !s.is_ascii() {
+    if !matches!(s.len(), 3 | 4 | 6 | 8) || !s[1..].chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(Error::new(ErrorKind::InvalidHex, s));
     }
 
     let n = s.len();
 
-    fn parse_single_digit(digit: &str) -> Result<f32> {
+    let parse_digit = |digit: &str, single: bool| -> Result<f32> {
         u8::from_str_radix(digit, 16)
-            .map(|n| ((n << 4) | n) as f32 / 255.0)
-            .map_err(|_| Error::new(ErrorKind::InvalidHex, digit))
-    }
+            .map(|n| {
+                if single {
+                    ((n << 4) | n) as f32 / 255.0
+                } else {
+                    n as f32 / 255.0
+                }
+            })
+            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))
+    };
 
     if n == 3 || n == 4 {
-        let r = parse_single_digit(&s[0..1])?;
-        let g = parse_single_digit(&s[1..2])?;
-        let b = parse_single_digit(&s[2..3])?;
+        let r = parse_digit(&s[0..1], true)?;
+        let g = parse_digit(&s[1..2], true)?;
+        let b = parse_digit(&s[2..3], true)?;
 
         let a = if n == 4 {
-            parse_single_digit(&s[3..4])?
+            parse_digit(&s[3..4], true)?
         } else {
             1.0
         };
 
         Ok(D2D1_COLOR_F { r, g, b, a })
     } else if n == 6 || n == 8 {
-        let r = u8::from_str_radix(&s[0..2], 16)
-            .map(|n| n as f32 / 255.0)
-            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?;
-        let g = u8::from_str_radix(&s[2..4], 16)
-            .map(|n| n as f32 / 255.0)
-            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?;
-        let b = u8::from_str_radix(&s[4..6], 16)
-            .map(|n| n as f32 / 255.0)
-            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?;
+        let r = parse_digit(&s[0..2], false)?;
+        let g = parse_digit(&s[2..4], false)?;
+        let b = parse_digit(&s[4..6], false)?;
 
         let a = if n == 8 {
-            u8::from_str_radix(&s[6..8], 16)
-                .map(|n| n as f32 / 255.0)
-                .map_err(|_| Error::new(ErrorKind::InvalidHex, s))?
+            parse_digit(&s[6..8], false)?
         } else {
             1.0
         };
