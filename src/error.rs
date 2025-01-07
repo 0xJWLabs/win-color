@@ -13,6 +13,7 @@ pub enum ErrorKind {
     InvalidDarken,
     // Error when the lighten operation encounters an invalid input.
     InvalidLighten,
+    InvalidData,
     // Error when unknown.
     InvalidUnknown,
 }
@@ -28,6 +29,7 @@ impl core::fmt::Display for ErrorKind {
             Self::InvalidUnknown => write!(f, "invalid unknown format"),
             Self::InvalidAccent => write!(f, "invalid accent color"),
             Self::InvalidGradientCoordinates => write!(f, "invalid gradient coordinates"),
+            Self::InvalidData => write!(f, "invalid data"),
             Self::InvalidDarken => write!(f, "invalid darken format"),
             Self::InvalidLighten => write!(f, "invalid lighten format"),
         }

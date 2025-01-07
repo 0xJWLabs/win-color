@@ -1,4 +1,5 @@
-use windows::Win32::Graphics::Direct2D::{Common::D2D1_COLOR_F, ID2D1SolidColorBrush};
+use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
+use windows::Win32::Graphics::Direct2D::ID2D1SolidColorBrush;
 
 /// Represents a solid color with a specific opacity.
 ///

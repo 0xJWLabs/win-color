@@ -12,10 +12,9 @@ mod error;
 mod gradient;
 mod parser;
 mod solid;
-mod utils;
 
-use parser::parse_color;
 use parser::parse_color_mapping;
+use parser::parse_color_string;
 use serde::Deserialize;
 use windows::core::Result as WinResult;
 use windows::Foundation::Numerics::Matrix3x2;
@@ -29,13 +28,13 @@ use windows::Win32::Graphics::Direct2D::D2D1_EXTEND_MODE_CLAMP;
 use windows::Win32::Graphics::Direct2D::D2D1_GAMMA_2_2;
 use windows::Win32::Graphics::Direct2D::D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES;
 
+pub use colorparser_css::GradientCoordinates;
 pub use error::Error;
 pub use error::ErrorKind;
 pub use error::Result;
 pub use gradient::ColorMapping;
 pub use gradient::ColorMappingImpl;
 pub use gradient::Gradient;
-pub use gradient::GradientCoordinates;
 pub use gradient::GradientDirection;
 pub use gradient::GradientImpl;
 pub use solid::Solid;
@@ -109,7 +108,7 @@ pub trait ColorImpl {
     ///
     /// # Returns
     /// A `Result` containing either the fetched `Color` or a `WinColorError` if the operation fails.
-    fn from_global_color(color: &GlobalColor, is_active: Option<bool>) -> Result<Color>;
+    fn from_global_color(color: &GlobalColor) -> Result<Color>;
 
     /// Sets the opacity of the color.
     ///
@@ -166,23 +165,21 @@ pub trait ColorImpl {
 }
 
 pub trait GlobalColorImpl {
-    fn to_color(&self, is_active: Option<bool>) -> Result<Color>;
+    fn to_color(&self) -> Result<Color>;
 }
 
 impl GlobalColorImpl for GlobalColor {
-    fn to_color(&self, is_active: Option<bool>) -> Result<Color> {
+    fn to_color(&self) -> Result<Color> {
         match self {
-            GlobalColor::String(s) => parse_color(s.as_str(), is_active),
-            GlobalColor::Mapping(gradient_def) => {
-                parse_color_mapping(gradient_def.clone(), is_active)
-            }
+            GlobalColor::String(s) => parse_color_string(s.as_str()),
+            GlobalColor::Mapping(gradient_def) => parse_color_mapping(gradient_def.clone()),
         }
     }
 }
 
 impl ColorImpl for Color {
-    fn from_global_color(global_color: &GlobalColor, is_active: Option<bool>) -> Result<Self> {
-        global_color.to_color(is_active)
+    fn from_global_color(global_color: &GlobalColor) -> Result<Self> {
+        global_color.to_color()
     }
 
     fn set_opacity(&self, opacity: f32) {

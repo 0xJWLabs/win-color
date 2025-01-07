@@ -1,23 +1,12 @@
 //! This module handles named colors and related utilities.
 
-mod named_colors;
-
-pub use named_colors::COLOR_REGEX;
-use named_colors::DARKEN_LIGHTEN_REGEX;
-pub use named_colors::NAMED_COLORS;
-use windows::Win32::Foundation::BOOL;
-use windows::Win32::Foundation::FALSE;
+use colorparser_css::Color as CssColor;
 use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
 use windows::Win32::Graphics::Direct2D::Common::D2D1_GRADIENT_STOP;
-use windows::Win32::Graphics::Dwm::DwmGetColorizationColor;
 
 use crate::error::Error;
 use crate::error::ErrorKind;
 use crate::error::Result;
-use crate::gradient::is_valid_direction;
-use crate::utils::darken;
-use crate::utils::lighten;
-use crate::utils::strip_string;
 use crate::Color;
 use crate::ColorMapping;
 use crate::Gradient;
@@ -46,37 +35,47 @@ use crate::Solid;
 /// };
 /// let color = parse_color_mapping(mapping, Some(false))?;
 /// ```
-pub fn parse_color_mapping(s: ColorMapping, is_active: Option<bool>) -> Result<Color> {
+pub fn parse_color_mapping(s: ColorMapping) -> Result<Color> {
     match s.colors.len() {
         0 => Ok(Color::Solid(Solid {
             color: D2D1_COLOR_F::default(),
             brush: None,
         })),
-        1 => Ok(Color::Solid(Solid {
-            color: parse(s.colors[0].as_str(), is_active)?,
-            brush: None,
-        })),
+        1 => {
+            let result = parse_color_string(&s.colors[0])?;
+            Ok(result)
+        }
         _ => {
             let num_colors = s.colors.len();
             let step = 1.0 / (num_colors - 1) as f32;
-            let gradient_stops = s
+
+            let gradient_stops: Vec<D2D1_GRADIENT_STOP> = s
                 .colors
                 .iter()
                 .enumerate()
                 .filter_map(|(i, hex)| {
-                    parse(hex, is_active).ok().map(|color| D2D1_GRADIENT_STOP {
-                        position: i as f32 * step,
-                        color,
-                    })
+                    match parse_color_string(hex).ok()? {
+                        Color::Solid(solid) => Some(D2D1_GRADIENT_STOP {
+                            position: i as f32 * step,
+                            color: solid.color,
+                        }),
+                        _ => None, // Skip gradients or unsupported colors
+                    }
                 })
-                .collect(); // Collect the successful results into a Vec
+                .collect();
 
-            let direction = match s.direction {
-                GradientDirection::Direction(direction) => {
-                    GradientCoordinates::try_from(direction.as_str())
+            if gradient_stops.is_empty() {
+                return Err(Error::new(ErrorKind::InvalidData, "No valid colors found"));
+            }
+
+            let direction = match &s.direction {
+                GradientDirection::Direction(dir) => {
+                    // Ensure proper error handling and mapping
+                    GradientCoordinates::try_from(dir.as_str())
+                        .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))?
                 }
-                GradientDirection::Coordinates(direction) => Ok(direction),
-            }?;
+                GradientDirection::Coordinates(coords) => coords.clone(),
+            };
 
             Ok(Color::Gradient(Gradient {
                 gradient_stops,
@@ -87,245 +86,64 @@ pub fn parse_color_mapping(s: ColorMapping, is_active: Option<bool>) -> Result<C
     }
 }
 
-/// Parses a color string and returns a `Color` enum, or an error if the string is invalid.
-///
-/// This function supports various formats such as RGB, RGBA, hex, gradient, and special values like `accent`.
-///
-/// # Parameters
-/// - `s`: The color string to parse.
-/// - `is_active`: Optional boolean that determines the behavior of color parsing for active states.
-///
-/// # Returns
-/// - `Ok(Color)` on successful parsing.
-/// - `Err(WinColorError)` if the color string is invalid.
-///
-/// # Examples
-///
-/// ```rust
-/// let color = parse_color("#89b4fa", Some(false))?;
-/// ```
-pub fn parse_color(s: &str, is_active: Option<bool>) -> Result<Color> {
-    if s.starts_with("gradient(") && s.ends_with(")") {
-        return parse_color(
-            strip_string(s.to_string(), &["gradient("], ')').as_str(),
-            is_active,
-        );
-    }
+pub fn parse_color_string(s: &str) -> Result<Color> {
+    let css_color = CssColor::from_html(s).map_err(|e| {
+        Error::new(
+            ErrorKind::InvalidUnknown,
+            format!("CSS parsing failed: {}", e),
+        )
+    })?;
 
-    let color_matches = COLOR_REGEX
-        .captures_iter(s)
-        .filter_map(|cap| cap.get(0).map(|m| m.as_str()))
-        .collect::<Vec<&str>>();
-
-    if color_matches.len() == 1 {
-        let color = parse(color_matches[0], is_active)?;
+    if let Ok(solid) = css_color.to_solid() {
+        let normalized_rgba = solid.to_normalized_rgba();
+        let color = D2D1_COLOR_F {
+            r: normalized_rgba.r,
+            g: normalized_rgba.g,
+            b: normalized_rgba.b,
+            a: normalized_rgba.a,
+        };
 
         return Ok(Color::Solid(Solid { color, brush: None }));
-    }
+    } else if let Ok(gradient) = css_color.to_gradient() {
+        let direction = gradient.direction;
+        let colors = gradient.colors;
 
-    let remaining_input = s
-        [s.rfind(color_matches.last().unwrap()).unwrap() + color_matches.last().unwrap().len()..]
-        .trim_start();
+        let num_colors = colors.len();
 
-    let remaining_input_arr = remaining_input
-        .split(',')
-        .filter_map(|s| {
-            let trimmed = s.trim();
-            (!trimmed.is_empty()).then_some(trimmed)
-        })
-        .collect::<Vec<&str>>();
+        let step = 1.0 / (num_colors - 1) as f32;
+        let gradient_stops: Vec<D2D1_GRADIENT_STOP> = colors
+            .into_iter()
+            .enumerate()
+            .map(|(i, solid)| {
+                let normalized_rgba = solid.to_normalized_rgba();
+                let color = D2D1_COLOR_F {
+                    r: normalized_rgba.r,
+                    g: normalized_rgba.g,
+                    b: normalized_rgba.b,
+                    a: normalized_rgba.a,
+                };
 
-    let direction = remaining_input_arr
-        .iter()
-        .find(|&&input| is_valid_direction(input))
-        .map(|&s| s.to_string())
-        .unwrap_or_else(|| "to_right".to_string());
-
-    let colors = color_matches
-        .iter()
-        .filter_map(|&color| parse(color, is_active).ok()) // Only keep Ok values
-        .collect::<Vec<D2D1_COLOR_F>>();
-
-    let num_colors = colors.len();
-    let step = 1.0 / (num_colors - 1) as f32;
-
-    let gradient_stops = colors
-        .into_iter()
-        .enumerate()
-        .map(|(i, color)| D2D1_GRADIENT_STOP {
-            position: i as f32 * step,
-            color,
-        })
-        .collect();
-
-    let direction = GradientCoordinates::try_from(direction.as_str())?;
-
-    Ok(Color::Gradient(Gradient {
-        gradient_stops,
-        direction,
-        brush: None,
-    }))
-}
-
-fn parse(s: &str, is_active: Option<bool>) -> Result<D2D1_COLOR_F> {
-    if s == "accent" {
-        let mut pcr_colorization: u32 = 0;
-        let mut pf_opaqueblend: BOOL = FALSE;
-
-        if unsafe { DwmGetColorizationColor(&mut pcr_colorization, &mut pf_opaqueblend) }.is_err() {
-            return Err(Error::new(
-                ErrorKind::InvalidAccent,
-                "accent color not found",
-            ));
-        }
-
-        let r = ((pcr_colorization & 0x00FF0000) >> 16) as f32 / 255.0;
-        let g = ((pcr_colorization & 0x0000FF00) >> 8) as f32 / 255.0;
-        let b = (pcr_colorization & 0x000000FF) as f32 / 255.0;
-        let avg = (r + g + b) / 3.0;
-
-        return match is_active {
-            Some(true) => Ok(D2D1_COLOR_F { r, g, b, a: 1.0 }),
-            _ => Ok(D2D1_COLOR_F {
-                r: avg / 1.5 + r / 10.0,
-                g: avg / 1.5 + g / 10.0,
-                b: avg / 1.5 + b / 10.0,
-                a: 1.0,
-            }),
-        };
-    }
-
-    if let Some(color) = NAMED_COLORS.get(s) {
-        return Ok(*color);
-    }
-
-    if let Some(s) = s.strip_prefix("#") {
-        return parse_hex(s);
-    }
-
-    if s.starts_with("rgb(") || s.starts_with("rgba(") {
-        let stripped_rgba = strip_string(s.to_string(), &["rgb(", "rgba("], ')');
-        let rgba = stripped_rgba.replace(['/', ','], " ");
-        let params = rgba
-            .split_whitespace()
-            .map(|s| s.trim())
-            .collect::<Vec<&str>>();
-
-        if params.len() != 3 && params.len() != 4 {
-            return Err(Error::new(ErrorKind::InvalidRgb, s));
-        }
-
-        let r = parse_percent_or_255(params[0]);
-        let g = parse_percent_or_255(params[1]);
-        let b = parse_percent_or_255(params[2]);
-
-        let a = if params.len() == 4 {
-            parse_percent_or_float(params[3])
-        } else {
-            Some((1.0, true))
-        };
-
-        if let (Some((r, r_fmt)), Some((g, g_fmt)), Some((b, b_fmt)), Some((a, _))) = (r, g, b, a) {
-            if r_fmt == g_fmt && g_fmt == b_fmt {
-                return Ok(D2D1_COLOR_F {
-                    r: r.clamp(0.0, 1.0),
-                    g: g.clamp(0.0, 1.0),
-                    b: b.clamp(0.0, 1.0),
-                    a: a.clamp(0.0, 1.0),
-                });
-            }
-        }
-
-        return Err(Error::new(ErrorKind::InvalidRgb, s));
-    } else if s.starts_with("darken(") || s.starts_with("lighten(") {
-        let darken_lighten_re = &DARKEN_LIGHTEN_REGEX;
-
-        if let Some(caps) = darken_lighten_re.captures(s) {
-            if caps.len() != 4 {
-                if s.starts_with("darken(") {
-                    return Err(Error::new(ErrorKind::InvalidDarken, s));
-                }
-                return Err(Error::new(ErrorKind::InvalidLighten, s));
-            }
-            let dark_or_lighten = &caps[1];
-            let color_str = &caps[2];
-            let percentage = &caps[3].parse::<f32>().unwrap_or(10.0);
-
-            let color = parse(color_str, is_active)?;
-            let color_res = match dark_or_lighten {
-                "darken" => darken(color, *percentage),
-                "lighten" => lighten(color, *percentage),
-                _ => color,
-            };
-
-            return Ok(color_res);
-        }
-
-        if s.starts_with("darken(") {
-            return Err(Error::new(ErrorKind::InvalidDarken, s));
-        }
-        return Err(Error::new(ErrorKind::InvalidLighten, s));
-    }
-
-    Ok(D2D1_COLOR_F::default())
-}
-
-fn parse_hex(s: &str) -> Result<D2D1_COLOR_F> {
-    if !matches!(s.len(), 3 | 4 | 6 | 8) || !s[1..].chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(Error::new(ErrorKind::InvalidHex, s));
-    }
-
-    let n = s.len();
-
-    let parse_digit = |digit: &str, single: bool| -> Result<f32> {
-        u8::from_str_radix(digit, 16)
-            .map(|n| {
-                if single {
-                    ((n << 4) | n) as f32 / 255.0
-                } else {
-                    n as f32 / 255.0
+                D2D1_GRADIENT_STOP {
+                    position: i as f32 * step,
+                    color,
                 }
             })
-            .map_err(|_| Error::new(ErrorKind::InvalidHex, s))
-    };
+            .collect();
 
-    if n == 3 || n == 4 {
-        let r = parse_digit(&s[0..1], true)?;
-        let g = parse_digit(&s[1..2], true)?;
-        let b = parse_digit(&s[2..3], true)?;
-
-        let a = if n == 4 {
-            parse_digit(&s[3..4], true)?
-        } else {
-            1.0
+        let direction = GradientCoordinates {
+            start: direction.start,
+            end: direction.end,
         };
 
-        Ok(D2D1_COLOR_F { r, g, b, a })
-    } else if n == 6 || n == 8 {
-        let r = parse_digit(&s[0..2], false)?;
-        let g = parse_digit(&s[2..4], false)?;
-        let b = parse_digit(&s[4..6], false)?;
-
-        let a = if n == 8 {
-            parse_digit(&s[6..8], false)?
-        } else {
-            1.0
-        };
-
-        Ok(D2D1_COLOR_F { r, g, b, a })
-    } else {
-        Err(Error::new(ErrorKind::InvalidHex, s))
+        return Ok(Color::Gradient(Gradient {
+            direction,
+            gradient_stops,
+            brush: None,
+        }));
     }
-}
 
-fn parse_percent_or_float(s: &str) -> Option<(f32, bool)> {
-    s.strip_suffix('%')
-        .and_then(|s| s.parse().ok().map(|t: f32| (t / 100.0, true)))
-        .or_else(|| s.parse().ok().map(|t| (t, false)))
-}
-
-fn parse_percent_or_255(s: &str) -> Option<(f32, bool)> {
-    s.strip_suffix('%')
-        .and_then(|s| s.parse().ok().map(|t: f32| (t / 100.0, true)))
-        .or_else(|| s.parse().ok().map(|t: f32| (t / 255.0, false)))
+    Err(Error::new(
+        ErrorKind::InvalidUnknown,
+        "Input does not represent a valid solid color or gradient",
+    ))
 }

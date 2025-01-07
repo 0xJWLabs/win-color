@@ -10,6 +10,6 @@ fn main() {
         &["#89b4fa", "#cba6f7"],
         GradientDirection::from("40grad"),
     ));
-    println!("{:?}", gc.to_color(None));
-    println!("{:?}", gc_mapping.to_color(None));
+    println!("{:?}", gc.to_color());
+    println!("{:?}", gc_mapping.to_color());
 }
