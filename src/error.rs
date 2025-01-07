@@ -1,19 +1,10 @@
 /// Represents errors that can occur when handling colors in Windows.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ErrorKind {
-    /// Error when the gradient coordinates are invalid.
-    InvalidGradientCoordinates,
-    /// Error when the Windows accent color cannot be found.
-    InvalidAccent,
-    /// Error when the provided hex color format is invalid.
-    InvalidHex,
-    /// Error when the provided RGB color format is invalid.
-    InvalidRgb,
-    // Error when the darken operation encounters an invalid input.
-    InvalidDarken,
-    // Error when the lighten operation encounters an invalid input.
-    InvalidLighten,
+    /// Error when data is invalid.
     InvalidData,
+    // Error when input is invalid.
+    InvalidInput,
     // Error when unknown.
     InvalidUnknown,
 }
@@ -24,14 +15,9 @@ impl core::fmt::Display for ErrorKind {
     /// This is used when the error kind is displayed directly (e.g., in an error message).
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidHex => write!(f, "invalid hex format"),
-            Self::InvalidRgb => write!(f, "invalid rgb format"),
             Self::InvalidUnknown => write!(f, "invalid unknown format"),
-            Self::InvalidAccent => write!(f, "invalid accent color"),
-            Self::InvalidGradientCoordinates => write!(f, "invalid gradient coordinates"),
+            Self::InvalidInput => write!(f, "invalid input"),
             Self::InvalidData => write!(f, "invalid data"),
-            Self::InvalidDarken => write!(f, "invalid darken format"),
-            Self::InvalidLighten => write!(f, "invalid lighten format"),
         }
     }
 }
